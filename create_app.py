@@ -134,7 +134,7 @@ class Main:
                 os.system('pip install --upgrade virtualenv')
 
     def create_paths(self):
-        paths = ('', '/main', '/auth', '/templates')
+        paths = ('', '/main', '/auth', '/templates' , '/templates/auth')
         for path in paths:
 
             try:
@@ -253,7 +253,6 @@ def create_app(config):
     migrate.init_app(app , db)
 
     app.register_error_handler(404 , page_not_found)
-    register blueprints
 
     from .auth import create_module as auth_create_module
     from .main import create_module as main_create_module
@@ -270,7 +269,7 @@ def create_module(app , **kwargs):
     app.register_blueprint(main_blueprint)
             ''')
 
-        with open('{}/main/__init__.py'.format(self.data['project_name']) , 'w+') as f:
+        with open('{}/main/controllers.py'.format(self.data['project_name']) , 'w+') as f:
             f.write('''
 from flask import Blueprint , render_template , redirect, url_for
 
@@ -470,12 +469,148 @@ class User(db.Model):
         return str(self.id)
             ''')
 
+
+    def create_templates(self):
+
+        with open('{}/templates/auth/login.html'.format(self.data['project_name']) , 'w+') as f:
+            f.write('''
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block body %}
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <h1 class="text-center">Login</h1>
+            <form method="POST" action="{{ url_for('.login') }}">
+                {{ form.hidden_tag() }}
+                <div class="form-group">
+                    {{ form.username.label }}
+                    {% if form.username.errors %}
+                        {% for e in form.username.errors %}
+                            <p class="help-block">{{ e }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    {{ form.username(class_='form-control') }}
+                </div>
+                
+                <div class="form-group">
+                    {{ form.password.label }}
+                    {% if form.password.errors %}
+                        {% for e in form.password.errors %}
+                            <p class="help-block">{{ e }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    {{ form.password(class_='form-control') }}
+                </div>
+                <div class="form-group">
+                    {{ form.remember.label }}
+                    {% if form.remember.errors %}
+                        {% for e in form.remember.errors %}
+                            <p class="help-block">{{ e }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    {{ form.remember(class_='form-control') }}
+                </div>
+                <input class="btn btn-primary" type="submit" value="Login">
+            </form>
+            <hr>
+            
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+{% endblock %}
+            ''')
+
+        optionals_form = ''
+
+        if self.recaptcha['integrate_recaptcha']:
+            optionals_form = optionals_form + r'''
+<div class="form-group">
+    {{ form.recaptcha.label }}
+    {% if form.recaptcha.errors %}
+        {% for e in form.recaptcha.errors %}
+            <p class="help-block">{{ e }}</p>
+        {% endfor %}
+    {% endif %}
+    {{ form.recaptcha() }}
+</div>
+            '''
+
+        with open('{}/templates/auth/register.html'.format(self.data['project_name']) , 'w+') as f:
+            f.write('''
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block body %}
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <h1 class="text-center">Register</h1>
+            <form method="POST" action="{{ url_for('.register') }}">
+                {{ form.hidden_tag() }}
+                <div class="form-group">
+                    {{ form.username.label }}
+                    {% if form.username.errors %}
+                        {% for e in form.username.errors %}
+                            <p class="help-block">{{ e }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    {{ form.username(class_='form-control') }}
+                </div>
+                <div class="form-group">
+                    {{ form.password.label }}
+                    {% if form.password.errors %}
+                        {% for e in form.password.errors %}
+                            <p class="help-block">{{ e }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    {{ form.password(class_='form-control') }}
+                </div>
+                <div class="form-group">
+                    {{ form.confirm.label }}
+                    {% if form.confirm.errors %}
+                        {% for e in form.confirm.errors %}
+                            <p class="help-block">{{ e }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    {{ form.confirm(class_='form-control') }}
+                </div>'''+ optionals_form + '''
+                
+                <input class="btn btn-primary" type="submit" value="Register">
+            </form>
+            <hr>
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+{% endblock %}
+            ''')
+
+        with open('{}/templates/base.html'.format(self.data['project_name']) , 'w+') as f:
+            f.write('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>{% block title %}FLASK MVC SIMPLE APP{% endblock %}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+</head>
+<body>
+    {% block body %}
+    {% endblock %}
+</body>
+</html>
+            ''')
+
+
 data = create_project(sys.argv[1])
 if data:
     x = Main(data)
     x.create_paths()
     x.create_main()
     x.create_main_modules()
+    x.create_templates()
 # if not data:
 #     print('cos poszlo nie tak')
 
