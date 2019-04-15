@@ -105,6 +105,9 @@ def create_project(app_name):
                         'integrate_recaptcha':False,
                         'RECAPTCHA_PUBLIC_KEY':False,
                         'RECAPTCHA_PRIVATE_KEY':False
+                    },
+                    'auth_setting':{
+                        'allow_to_register':True
                     }
                 }
             json.dump(data , f)
@@ -238,9 +241,11 @@ import os
 from flask import Flask , render_template
 from flask_migrate import Migrate 
 from flask_sqlalchemy import SQLAlchemy
+from flask_admin import Admin
 
 db = SQLAlchemy()
 migrate = Migrate()
+admin = Admin()
 
 def page_not_found(error):
     return render_template('404.html') , 404
@@ -249,6 +254,7 @@ def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
 
+    admin.init_app(app)
     db.init_app(app)
     migrate.init_app(app , db)
 
@@ -308,40 +314,12 @@ def create_module(app , **kwargs):
     app.register_blueprint(auth_blueprint)
             ''')
 
-        with open('{}/auth/controllers.py'.format(data['project_name']) , 'w+') as f:
-            f.write('''
-from flask_login import login_user , logout_user
-from flask import render_template , flash , redirect , url_for , Blueprint
-from .forms import Register_Form , Login_Form
-from .models import db , User
-
-auth_blueprint = Blueprint(
-    'auth',
-    __name__,
-    template_folder='../templates/auth',
-    url_prefix="/auth"
-)
-
-@auth_blueprint.route('/login' , methods = ['POST' , 'GET'])
-def login():
-    form = Login_Form()
-    if form.validate_on_submit():
-        user = User.query.filter_by(username = form.username.data).first()
-        login_user(user , remember=form.remember.data)
-
-        flash("You have been logged in" , category="success")
-        return redirect(url_for('main.index'))
-
-    return render_template('login.html' , form = form)
-
-@auth_blueprint.route('/logout' , methods = ['GET' , 'POST'])
-def logout():
-    logout_user()
-    flash("You have been logged out" , category = 'success')
-    return redirect(url_for('.login'))
-
+        if self.data['auth_setting']['allow_to_register']:
+            print('No powinnop dzilaac')
+            register_template = '''
 @auth_blueprint.route('/register' , methods = ['GET' , 'POST'])
 def register():
+    from .forms import Register_Form
     form = Register_Form()
     if form.validate_on_submit():
         new_user = User()
@@ -357,15 +335,83 @@ def register():
         return redirect(url_for('.login'))
     
     return render_template('register.html' , form=form)
-            ''')
+'''
+        else:
+            register_template = ''
+             
+        with open('{}/auth/controllers.py'.format(data['project_name']) , 'w+') as f:
+            f.write('''
+from flask_login import login_user , logout_user
+from flask import render_template , flash , redirect , url_for , Blueprint
+from .forms import Login_Form
+from .models import db , User
+
+auth_blueprint = Blueprint(
+    'auth',
+    __name__,
+    template_folder='../templates/auth',
+    url_prefix="/auth"
+)
+
+@auth_blueprint.route('/login' , methods = ['POST' , 'GET'])
+def login():
+    form = Login_Form()
+
+    if not form.validate_on_submit():
+        if request.args.get('next'):
+            session['next'] = request.args.get('next')
+        else:
+            session['next'] = url_for('main.index')
+
+    if form.validate_on_submit():
+        user = User.query.filter_by(username = form.username.data).first()
+        login_user(user , remember=form.remember.data)
+
+        flash("You have been logged in" , category="success")
+        return redirect(session['next'])
+
+    return render_template('login.html' , form = form)
+
+@auth_blueprint.route('/logout' , methods = ['GET' , 'POST'])
+def logout():
+    logout_user()
+    flash("You have been logged out" , category = 'success')
+    return redirect(url_for('.login'))
+
+{}           '''.format(register_template))
+
+        
 
         with open('{}/auth/forms.py'.format(data['project_name']) , 'w+') as f:
-
             if self.recaptcha['integrate_recaptcha']:
                 str_recaptcha_ = 'recaptcha = RecaptchaField()\n'
             else:
                 str_recaptcha_ = ''
+            if self.data['auth_setting']['allow_to_register']:
+                register_form = '''
+class Register_Form(Form):
+    username = StringField('Username' , [DataRequired() , Length(max=255)])
+    password = PasswordField('Password' , [DataRequired()])
+    confirm = PasswordField('Confirm Password' , [DataRequired() , EqualTo('password')])
+    
+    {}
+    def validate(self):
+        check_validate = super(Register_Form , self).validate()
+        if not check_validate:
+            return False
+        
+        user = User.query.filter_by(username = self.username.data).first()
 
+        if user:
+            self.username.errors.append(
+                'User with that name already exist'
+            )
+            return False
+
+        return True
+            '''.format(str_recaptcha_)
+            else:
+                register_form =''
             f.write('''
 from flask_wtf import FlaskForm as Form
 from flask_wtf import RecaptchaField
@@ -402,33 +448,14 @@ class Login_Form(Form):
             return False
         return True
 
-        
-class Register_Form(Form):
-    username = StringField('Username' , [DataRequired() , Length(max=255)])
-    password = PasswordField('Password' , [DataRequired()])
-    confirm = PasswordField('Confirm Password' , [DataRequired() , EqualTo('password')])
-    
-    {}
-    def validate(self):
-        check_validate = super(Register_Form , self).validate()
-        if not check_validate:
-            return False
-        
-        user = User.query.filter_by(username = self.username.data).first()
-
-        if user:
-            self.username.errors.append(
-                'User with that name already exist'
-            )
-            return False
-
-        return True
-            '''.format(str_recaptcha_))
+{}     
+'''.format(register_form))
 
         with open('{}/auth/models.py'.format(data['project_name']) , 'w+') as f:
-            f.write(r'''
+            f.write('''from flask_admin.contrib.sqla import ModelView
 from . import bcrypt , AnonymousUserMixin
 from .. import db
+from .. import admin
 
 class User(db.Model):
     id = db.Column(db.Integer() , primary_key=True)
@@ -467,6 +494,9 @@ class User(db.Model):
 
     def get_id(self):
         return str(self.id)
+
+
+admin.add_view(ModelView(User, db.session))
             ''')
 
 
@@ -536,8 +566,10 @@ class User(db.Model):
 </div>
             '''
 
-        with open('{}/templates/auth/register.html'.format(self.data['project_name']) , 'w+') as f:
-            f.write('''
+
+        if self.data['auth_setting']['allow_to_register']:
+            with open('{}/templates/auth/register.html'.format(self.data['project_name']) , 'w+') as f:
+                f.write('''
 {% extends "base.html" %}
 {% block title %}Register{% endblock %}
 {% block body %}
@@ -582,7 +614,7 @@ class User(db.Model):
         <div class="col-md-4"></div>
     </div>
 {% endblock %}
-            ''')
+                ''')
 
         with open('{}/templates/base.html'.format(self.data['project_name']) , 'w+') as f:
             f.write('''
