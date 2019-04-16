@@ -1,2 +1,5 @@
 test_env
 test_folder
+credentials.json
+__pycache__
+.vscode

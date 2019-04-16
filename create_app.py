@@ -107,7 +107,14 @@ def create_project(app_name):
                         'RECAPTCHA_PRIVATE_KEY':False
                     },
                     'auth_setting':{
-                        'allow_to_register':True
+                        'allow_to_register':True,
+                        'roles':True,
+                        'login_with_google':{
+                            'allow':False,
+                            'GOOGLE_CLIENT_ID':None,
+                            'GOOGLE_CLIENT_SECRET':None,
+                            'scope':['profile' , 'email']
+                        }
                     }
                 }
             json.dump(data , f)
@@ -188,6 +195,8 @@ Flask-Login
 Flask-WTF
 Flask-Migrate
 flask-bcrypt
+flask-dance
+blinker
 pymysql
 '''
             )
@@ -217,9 +226,15 @@ class Config(object):
 '''
             if self.recaptcha['integrate_recaptcha'] and self.recaptcha['RECAPTCHA_PUBLIC_KEY'] != False and self.recaptcha['RECAPTCHA_PRIVATE_KEY'] != False:
                 class_config = class_config + '''
-    RECAPTCHA_PUBLIC_KEY = '{}'
-    RECAPTCHA_PRIVATE_KEY = '{}'
-'''.format(self.recaptcha['RECAPTCHA_PUBLIC_KEY'] , self.recaptcha['RECAPTCHA_PRIVATE_KEY'])
+    RECAPTCHA_PUBLIC_KEY = '{0[RECAPTCHA_PUBLIC_KEY]}'
+    RECAPTCHA_PRIVATE_KEY = '{0[RECAPTCHA_PRIVATE_KEY]}'
+'''.format(self.recaptcha)
+
+            if self.data['auth_setting']['login_with_google']['allow']:
+                class_config = class_config + '''
+    GOOGLE_CLIENT_ID = '{0[GOOGLE_CLIENT_ID]}'
+    GOOGLE_CLIENT_SECRET = '{0[GOOGLE_CLIENT_SECRET]}'
+                '''.format(self.data['auth_setting']['login_with_google'])
 
         if class_config == '''
 class Config(object):  
@@ -241,11 +256,9 @@ import os
 from flask import Flask , render_template
 from flask_migrate import Migrate 
 from flask_sqlalchemy import SQLAlchemy
-from flask_admin import Admin
 
 db = SQLAlchemy()
 migrate = Migrate()
-admin = Admin()
 
 def page_not_found(error):
     return render_template('404.html') , 404
@@ -254,7 +267,6 @@ def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
 
-    admin.init_app(app)
     db.init_app(app)
     migrate.init_app(app , db)
 
@@ -287,7 +299,78 @@ def index():
 ''')
 
         with open('{}/auth/__init__.py'.format(self.data['project_name']) , 'w+') as f:
+            
+            auth_import = ''
+
+            if self.data['auth_setting']['login_with_google']['allow']:
+                auth_import = auth_import + '''
+from flask_dance.contrib.google import google , make_google_blueprint
+from flask_login import login_user
+from flask import flash , redirect , url_for , session
+'''
+
+            auth_option_create_module = ''
+            
+            if self.data['auth_setting']['login_with_google']['allow']:
+
+                auth_option_create_module = auth_option_create_module + '''
+    google_blueprint = make_google_blueprint(
+        client_id = app.config['GOOGLE_CLIENT_ID'],
+        client_secret = app.config['GOOGLE_CLIENT_SECRET'],
+        scope = {}
+    )
+
+    app.register_blueprint(google_blueprint , url_prefix = '/auth/login')
+            '''.format(self.data['auth_setting']['login_with_google']['scope'])
+
+            auth_other = ''
+
+            if self.data['auth_setting']['login_with_google']['allow']:
+                auth_other = auth_other + '''
+from flask_dance.consumer import oauth_authorized
+
+@oauth_authorized.connect
+def logged_in(blueprint, token):
+    from .models import db, User
+    if blueprint.name == 'twitter':
+        username = session.get('twitter_oauth_token').get('screen_name')
+    elif blueprint.name == 'google':
+        resp = google.get('/oauth2/v2/userinfo').json()
+        username = resp['email']
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        user = User()
+        user.username = username
+        db.session.add(user)
+        db.session.commit()
+    login_user(user)
+    flash("You have been logged in.", category="success")
+'''
+
+            if self.data['auth_setting']['roles']:
+                auth_import = auth_import + '''
+import functools
+from flask_login import current_user
+from flask import abort
+'''
+
+            has_role_decorator = ''
+            if self.data['auth_setting']['roles']:
+                has_role_decorator = has_role_decorator + '''
+def has_role(name):
+    def real_decorator(f):
+        def wraps(*args , **kwargs):
+            if current_user.has_role(name):
+                return f(*args , **kwargs)
+            else:
+                abort(403)
+
+        return functools.update_wrapper(wraps , f)
+    return real_decorator
+            '''
+
             f.write('''
+{}
 from flask_login import LoginManager , AnonymousUserMixin
 from flask_bcrypt import Bcrypt
 
@@ -307,15 +390,19 @@ def load_user(userid):
     from .models import User
     return User.query.get(int(userid))
 
+{}
+
 def create_module(app , **kwargs):
     bcrypt.init_app(app)
     login_manager.init_app(app)
     from .controllers import auth_blueprint
     app.register_blueprint(auth_blueprint)
-            ''')
+    {}
+
+{}
+            '''.format(auth_import , has_role_decorator , auth_option_create_module , auth_other))
 
         if self.data['auth_setting']['allow_to_register']:
-            print('No powinnop dzilaac')
             register_template = '''
 @auth_blueprint.route('/register' , methods = ['GET' , 'POST'])
 def register():
@@ -342,7 +429,7 @@ def register():
         with open('{}/auth/controllers.py'.format(data['project_name']) , 'w+') as f:
             f.write('''
 from flask_login import login_user , logout_user
-from flask import render_template , flash , redirect , url_for , Blueprint
+from flask import render_template , flash , redirect , url_for , Blueprint , request , session
 from .forms import Login_Form
 from .models import db , User
 
@@ -452,17 +539,67 @@ class Login_Form(Form):
 '''.format(register_form))
 
         with open('{}/auth/models.py'.format(data['project_name']) , 'w+') as f:
-            f.write('''from flask_admin.contrib.sqla import ModelView
+            
+            role_modules = ''
+            
+            if self.data['auth_setting']['roles']:
+                role_modules = role_modules + r'''
+roles = db.Table(
+    'role_users',
+    db.Column('user_id' , db.Integer , db.ForeignKey('user.id')),
+    db.Column('role_id' , db.Integer , db.ForeignKey('role.id'))
+)
+
+class Role(db.Model):
+    id = db.Column(db.Integer() , primary_key = True)
+    name = db.Column(db.String(80) , unique = True)
+    description = db.Column(db.String(255))
+
+    def __init__(self , name):
+        self.name = name
+
+    def __repr__(self):
+        return '<Role {}>'.format(self.name)'''
+            
+            user_module_option = ''
+            __init__role = ''
+            has_role = ''
+
+            if self.data['auth_setting']['roles']:
+
+                user_module_option = user_module_option + '''
+    roles = db.relationship(
+        'Role',
+        secondary=roles,
+        backref = db.backref('users' , lazy='dynamic')
+    )'''
+
+                __init__role = __init__role + '''
+        default = Role.query.filter_by(name = 'default').one()
+        self.roles.append(default)
+                '''
+
+                has_role = has_role + '''
+    def has_role(self , name):
+        for role in self.roles:
+            if role.name == name:
+                return True
+        return False
+                '''
+            f.write('''
 from . import bcrypt , AnonymousUserMixin
 from .. import db
-from .. import admin
+
+'''+role_modules+'''
 
 class User(db.Model):
     id = db.Column(db.Integer() , primary_key=True)
     username = db.Column(db.String(255) , nullable = False , index = True , unique = True)
     password = db.Column(db.String(255))
+    '''+user_module_option+'''
 
     def __init__(self, username = ''):
+        '''+__init__role+'''
         self.username = username
 
     def __repr__(self):
@@ -473,6 +610,8 @@ class User(db.Model):
 
     def check_password(self , password):
         return bcrypt.check_password_hash(self.password , password) 
+
+    '''+has_role+'''
 
     @property
     def is_authenticated(self):
@@ -496,13 +635,27 @@ class User(db.Model):
         return str(self.id)
 
 
-admin.add_view(ModelView(User, db.session))
             ''')
 
 
     def create_templates(self):
 
+        with open('{}/templates/404.html'.format(self.data['project_name']) , 'w+') as f:
+            f.write('''
+                Error 404
+                ''')
+
         with open('{}/templates/auth/login.html'.format(self.data['project_name']) , 'w+') as f:
+
+            login_with_oauth = ''
+
+            if self.data['auth_setting']['login_with_google']['allow']:
+                login_with_oauth = login_with_oauth + '''
+                <h2 class="text-center" > Register/Login With Google </h1>
+                <a href="{{ url_for('google.login')}}"> Login </a> 
+                '''
+
+
             f.write('''
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
@@ -544,7 +697,7 @@ admin.add_view(ModelView(User, db.session))
                 <input class="btn btn-primary" type="submit" value="Login">
             </form>
             <hr>
-            
+            '''+login_with_oauth+'''
         </div>
         <div class="col-md-4"></div>
     </div>
