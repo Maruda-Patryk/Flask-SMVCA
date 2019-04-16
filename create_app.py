@@ -196,6 +196,9 @@ Flask-WTF
 Flask-Migrate
 flask-bcrypt
 flask-dance
+flask-debugtoolbar
+Flask-Caching
+Flask-Assets
 blinker
 pymysql
 '''
@@ -256,9 +259,11 @@ import os
 from flask import Flask , render_template
 from flask_migrate import Migrate 
 from flask_sqlalchemy import SQLAlchemy
+from flask_debugtoolbar import DebugToolbarExtension
 
 db = SQLAlchemy()
 migrate = Migrate()
+debug_toolbar = DebugToolbarExtension()
 
 def page_not_found(error):
     return render_template('404.html') , 404
@@ -269,7 +274,7 @@ def create_app(config):
 
     db.init_app(app)
     migrate.init_app(app , db)
-
+    debug_toolbar.init_app(app)
     app.register_error_handler(404 , page_not_found)
 
     from .auth import create_module as auth_create_module
