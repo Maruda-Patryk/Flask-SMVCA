@@ -350,6 +350,11 @@ def logged_in(blueprint, token):
         db.session.commit()
     login_user(user)
     flash("You have been logged in.", category="success")
+
+    try:
+        return redirect(session['next'])
+    except:
+        return redirect(url_for('main.index'))
 '''
 
             if self.data['auth_setting']['roles']:
