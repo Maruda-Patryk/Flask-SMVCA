@@ -106,6 +106,9 @@ def create_project(app_name):
                         'RECAPTCHA_PUBLIC_KEY':False,
                         'RECAPTCHA_PRIVATE_KEY':False
                     },
+                    'admin':{
+                        'enabled':True
+                    },
                     'auth_setting':{
                         'allow_to_register':True,
                         'roles':True,
@@ -144,7 +147,12 @@ class Main:
                 os.system('pip install --upgrade virtualenv')
 
     def create_paths(self):
-        paths = ('', '/main', '/auth', '/templates' , '/templates/auth')
+        paths = ['', '/main', '/auth',  , '/templates' , '/templates/auth']
+
+        if self.data['admin']['enabled']:
+            paths.append('/admin')
+            paths.append('/templates/admin')
+
         for path in paths:
 
             try:
@@ -253,6 +261,16 @@ import os
             )
 
     def create_main_modules(self):
+        
+        modules = {}
+
+        if self.data['admin']['enabled']:
+            modules['admin'] = '''
+from .admin import create_module as admin_create_module
+admin_create_module(app)
+            '''
+        else:
+            modules['admin'] = ''
 
         with open('{}/__init__.py'.format(self.data['project_name']) , 'w+') as f:
             f.write('''
@@ -281,9 +299,10 @@ def create_app(config):
     from .main import create_module as main_create_module
     auth_create_module(app)
     main_create_module(app)
-    
+    {0[admin]}
+
     return app
-''')
+'''.format(modules))
 
         with open('{}/main/__init__.py'.format(self.data['project_name']) , 'w+') as f:
             f.write('''
@@ -646,7 +665,62 @@ class User(db.Model):
 
 
             ''')
+        
+        if self.data['admin']['enabled']:
+            with open('{}/admin/__init__.py' , 'w+') as f:
+                f.write('''
+from flask_admin import Admin
 
+admin = Admin()
+
+def create_module(app , **kwargs):
+    admin.init_app(app)
+                ''')
+
+        if self.data['admin']['enabled']:
+            with open('{}/admin/controllers.py' , 'w+') as f:
+                f.write('''
+from flask_admin import BaseView, expose
+from flask_login import login_required, current_user
+
+from webapp.auth import has_role
+
+class CustomerView(BaseView):
+    @expose('/')
+    @login_required
+    @has_role('admin')
+    def index(self):
+        return self.render('admin/custom.html')
+
+    @expose('/secound_page')
+    @login_required
+    @has_role('admin')
+    def secound_page(self)
+        return self.render('/admin/secound_page.html')
+
+                ''')
+
+            with open('{}/templates/admin/custom.html' , 'w+') as f:
+                f.write('''
+{% extends 'admin/master.html %}
+
+{% block body %}
+    This is the custom view!
+    
+    <a href='{{ url_for('.secound_page')}}
+{% endblock %}
+                ''')
+
+            with open('{}/templates/admin/secound_page.html' , 'w+') as f:
+                f.write('''
+{% extends 'admin/master.html %}
+
+{% block body %}
+    This is the second page!
+
+    <a href="{{ url_for('.index') }}">Link</a>  
+{% endblock %}
+                ''')
 
     def create_templates(self):
 
