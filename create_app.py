@@ -84,7 +84,7 @@ def create_project(app_name):
                             'DEBUG':True , 'SECRET_KEY':'if_you_dont_change_this_will_be_change_for_os.urandom(24)' ,
                             'SQLALCHEMY_DATABASE_URI':'mysql+pymysql://root:pass@localhost:3306/admin_page',
                             'other_setting':[
-                                {'name':'PORT' , 'value':8080}
+                                {'name':'DEBUG_TB_INTERCEPT_REDIRECTS' , 'value':False}
                             ]
                         },
                         
@@ -266,8 +266,8 @@ import os
 
         if self.data['admin']['enabled']:
             modules['admin'] = '''
-from .admin import create_module as admin_create_module
-admin_create_module(app)
+    from .admin import create_module as admin_create_module
+    admin_create_module(app)
             '''
         else:
             modules['admin'] = ''
@@ -300,7 +300,6 @@ def create_app(config):
     auth_create_module(app)
     main_create_module(app)
     {0[admin]}
-
     return app
 '''.format(modules))
 
@@ -370,10 +369,9 @@ def logged_in(blueprint, token):
     login_user(user)
     flash("You have been logged in.", category="success")
 
-    try:
+    if 'next' in session:
         return redirect(session['next'])
-    except:
-        return redirect(url_for('main.index'))
+    return redirect(url_for('main.index'))
 '''
 
             if self.data['auth_setting']['roles']:
@@ -483,6 +481,8 @@ def login():
         user = User.query.filter_by(username = form.username.data).first()
         login_user(user , remember=form.remember.data)
 
+        flash("You have been logged in" , category="success")
+        
         if 'next' in session:
             return redirect(session['next'])
         
@@ -587,7 +587,7 @@ class Role(db.Model):
     name = db.Column(db.String(80) , unique = True)
     description = db.Column(db.String(255))
 
-    def __init__(self , name):
+    def __init__(self , name = ''):
         self.name = name
 
     def __repr__(self):
@@ -670,22 +670,33 @@ class User(db.Model):
             ''')
         
         if self.data['admin']['enabled']:
+
+            role = ''
+            if self.data['auth_setting']['roles']:
+                role = ', Role'
             with open('{}/admin/__init__.py'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
 from flask_admin import Admin
-
+from .controllers import CustomerView , CustomModelView
+from {}.auth.models import db '''+role+''' , User
 admin = Admin()
 
 def create_module(app , **kwargs):
     admin.init_app(app)
-                ''')
+    admin.add_view(CustomerView(name='Customer'))
+    models = [User '''+role+''']
+
+    for model in models:
+        admin.add_view(CustomModelView(model , db.session , category='models'))
+
+                '''.format(self.data['project_name']))
 
         if self.data['admin']['enabled']:
             with open('{}/admin/controllers.py'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
 from flask_admin import BaseView, expose
 from flask_login import login_required, current_user
-
+from flask_admin.contrib.sqla import ModelView
 from webapp.auth import has_role
 
 class CustomerView(BaseView):
@@ -695,28 +706,32 @@ class CustomerView(BaseView):
     def index(self):
         return self.render('admin/custom.html')
 
-    @expose('/secound_page')
+    @expose('/second_page')
     @login_required
     @has_role('admin')
-    def secound_page(self)
-        return self.render('/admin/secound_page.html')
+    def second_page(self):
+        return self.render('/admin/second_page.html')
+
+class CustomModelView(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated and current_user.has_role('admin')
 
                 ''')
 
             with open('{}/templates/admin/custom.html'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
-{% extends 'admin/master.html %}
+{% extends 'admin/master.html' %}
 
 {% block body %}
     This is the custom view!
     
-    <a href='{{ url_for('.secound_page')}}
+    <a href="{{ url_for('.second_page')}}">Link</a>  
 {% endblock %}
                 ''')
 
-            with open('{}/templates/admin/secound_page.html'.format(self.data['project_name']) , 'w+') as f:
+            with open('{}/templates/admin/second_page.html'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
-{% extends 'admin/master.html %}
+{% extends 'admin/master.html' %}
 
 {% block body %}
     This is the second page!
