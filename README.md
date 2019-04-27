@@ -85,8 +85,8 @@ after those operation you file tree should look like:
 |-create_app.py
 |-requirements.txt
 |-<app_name>
-	|-__init__.py
-	|-auth
+    |-__init__.py
+    |-auth
         |-__init__.py
         |-controllers.py
         |-forms.py
