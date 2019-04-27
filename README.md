@@ -78,6 +78,7 @@ That's all, you should have a MVC aplication with authorization, RBAC(role-based
 
 after those operation you file tree should look like:
 
+```tree
 |-main_.py
 |-config.py
 |-manage.py
@@ -99,3 +100,4 @@ after those operation you file tree should look like:
             |-register.html
         |-404.html
         |-base.html
+```
