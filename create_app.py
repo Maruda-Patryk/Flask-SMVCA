@@ -147,7 +147,7 @@ class Main:
                 os.system('pip install --upgrade virtualenv')
 
     def create_paths(self):
-        paths = ['', '/main', '/auth',  , '/templates' , '/templates/auth']
+        paths = ['', '/main', '/auth', '/templates' , '/templates/auth']
 
         if self.data['admin']['enabled']:
             paths.append('/admin')
@@ -483,8 +483,11 @@ def login():
         user = User.query.filter_by(username = form.username.data).first()
         login_user(user , remember=form.remember.data)
 
-        flash("You have been logged in" , category="success")
-        return redirect(session['next'])
+        if 'next' in session:
+            return redirect(session['next'])
+        
+        return redirect(url_for('main.index'))
+
 
     return render_template('login.html' , form = form)
 
@@ -667,7 +670,7 @@ class User(db.Model):
             ''')
         
         if self.data['admin']['enabled']:
-            with open('{}/admin/__init__.py' , 'w+') as f:
+            with open('{}/admin/__init__.py'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
 from flask_admin import Admin
 
@@ -678,7 +681,7 @@ def create_module(app , **kwargs):
                 ''')
 
         if self.data['admin']['enabled']:
-            with open('{}/admin/controllers.py' , 'w+') as f:
+            with open('{}/admin/controllers.py'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
 from flask_admin import BaseView, expose
 from flask_login import login_required, current_user
@@ -700,7 +703,7 @@ class CustomerView(BaseView):
 
                 ''')
 
-            with open('{}/templates/admin/custom.html' , 'w+') as f:
+            with open('{}/templates/admin/custom.html'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
 {% extends 'admin/master.html %}
 
@@ -711,7 +714,7 @@ class CustomerView(BaseView):
 {% endblock %}
                 ''')
 
-            with open('{}/templates/admin/secound_page.html' , 'w+') as f:
+            with open('{}/templates/admin/secound_page.html'.format(self.data['project_name']) , 'w+') as f:
                 f.write('''
 {% extends 'admin/master.html %}
 
