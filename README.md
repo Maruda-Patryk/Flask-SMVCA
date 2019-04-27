@@ -68,7 +68,7 @@ Flask-SMVCA
         >>> db.session.commit()
         ```
 
-3. In config.json you can change option for your project (Documentation should apper on this (page)[http://patryk-maruda.pl/flask-smvca/doc] soon if this page dosn't work that's mean that i dosn't finished docs yet)
+3. In config.json you can change option for your project (Documentation should apper on this [page](http://patryk-maruda.pl/flask-smvca/doc) soon if this page dosn't work that's mean that i dosn't finished docs yet)
 4. For create project with option wich was given in config.json just type again:
     ```bash
     python create_app.py <name_of_your_project>
