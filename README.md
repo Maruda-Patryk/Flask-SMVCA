@@ -1,4 +1,4 @@
-# FLASK SIMPLE MVC APLICATION (Alpha 0.01)
+# FLASK SIMPLE MVC APPLICATION (Alpha 0.01)
 
 ## Description:
 
@@ -35,39 +35,7 @@ Flask-SMVCA
     |-create_app.py
     |-config.json
     ...
-
-    !IMPORTANT 
-    IF Flask-SMVCA is in alpha must do some extra staff with database:
     
-    First Let’s connect with application contexts:
-    in comand line type
-    ```bash
-    flask shell
-    ```
-    If you have a 'FLASK_APP' error, Defined the environment varible 'FLASK_APP':
-    ```bash
-    export FLASK_APP='manage'
-    ```
-        
-    Go to flask shell:
-    ```bash
-    flask shell
-    ```
-    
-    With flask contexts we need to created table in database, and 'default' role
-    
-    - Create table in Database :
-    	```bash
-        >>> db.create_all()
-        ```
-    
-    - Create Defoult Role:
-    	```bash
-        >>> role = Role(name='default')
-        >>> db.session.add(role)
-        >>> db.session.commit()
-        ```
-
 3. In config.json you can change option for your project (Documentation should apper on this [page](http://patryk-maruda.pl/flask-smvca/doc) soon if this page dosn't work that's mean that i dosn't finished docs yet)
 4. For create project with option wich was given in config.json just type again:
     ```bash

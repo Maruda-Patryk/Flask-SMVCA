@@ -76,13 +76,15 @@ def create_project(app_name):
 
     def create_config_file():
         with open('config.json' , 'w') as f:
+            import os
+
             data = {'project_name':app_name , 
                     'app_settings':[
                         
                         {
                             'env':'dev', 'object_name':'DevConfig' , 'default':True,
                             'DEBUG':True , 'SECRET_KEY':'if_you_dont_change_this_will_be_change_for_os.urandom(24)' ,
-                            'SQLALCHEMY_DATABASE_URI':'mysql+pymysql://root:pass@localhost:3306/admin_page',
+                            'SQLALCHEMY_DATABASE_URI':'sqlite:///{}/temporary_database.db'.format(os.getcwd()),
                             'other_setting':[
                                 {'name':'DEBUG_TB_INTERCEPT_REDIRECTS' , 'value':False}
                             ]
