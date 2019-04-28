@@ -183,14 +183,127 @@ if __name__ == "__main__":
 '''
 import os 
 from {} import db , migrate , create_app
-from {}.auth.models import User
+from {}.auth.models import User , Role
 
 env = os.environ.get('WEBAPP_ENV' , 'dev')
 app = create_app('config.%sConfig' %env.capitalize())
 
 @app.shell_context_processor
 def make_shell_context():
-    return dict(app=app , db=db , User=User)
+    return dict(app=app , db=db , User=User , Role=Role)
+
+def create_admin_account():
+    import getpass
+
+    print('Username:')
+    username = input()
+    
+    password = getpass.getpass("Password")
+    password_confirm = getpass.getpass("Password confirm")
+
+    while password != password_confirm:
+        print('passwords must be the same')
+        password = getpass.getpass("Password")
+        password_confirm = getpass.getpass("Password confirm")
+
+    with app.app_context():
+        user = User.query.filter_by(username = username).first()
+        if user:
+            print('This user already exist, if you want change password type: changepassword')
+            return None
+
+        admin_role = Role.query.filter_by(name='admin').first()
+
+        if not admin_role:
+            admin_role = Role(name='admin')
+            db.session.add(admin_role)
+            db.session.commit()
+
+        user = User(username=username)
+        user.set_password(password)
+        user.roles.append(admin_role)
+        db.session.add(user)
+        db.session.commit()
+        
+        print('admin was created')
+        return user
+
+def change_user_password():
+    
+    print('Username: ')
+    username = input()
+    print('Confirm Username')
+    username_confirm = input()
+
+    while username != username_confirm:
+        print('Username must be the same')
+        print('Username: ')
+        username = input()
+        print('Confirm Username')
+        username_confirm = input()
+
+    with app.app_context():
+        user = User.query.filter_by(username = username).first()
+        if not user:
+            print('user dosn t exist, ensure username is correct and try again')
+            return None
+
+        password = getpass.getpass("Password")
+        password_confirm = getpass.getpass("Password confirm")
+        
+        while password != password_confirm:
+            print('passwords must be the same')
+            password = getpass.getpass("Password")
+            password_confirm = getpass.getpass("Password confirm")
+            
+        user.set_password(password)
+        db.session.commit()
+
+        print('Role admin was add for user: %s' %user.username)
+        return user
+
+def make_admin():
+    
+    print('Username: ')
+    username = input()
+    print('Confirm Username')
+    username_confirm = input()
+
+    while username != username_confirm:
+        print('Username must be the same')
+        print('Username: ')
+        username = input()
+        print('Confirm Username')
+        username_confirm = input()
+    
+    with app.app_context():
+        user = User.query.filter_by(username = username).first()
+        if not user:
+            print('user dosn t exist, ensure username is correct and try again')
+            return None
+
+        admin_role = Role.query.filter_by(name = 'admin').first()
+        if not admin_role:
+            admin_role = Role(name = 'admin')
+            db.session.add(admin_role)
+
+        user.roles.append(admin_role)
+        db.session.commit()
+
+        print('Role admin was add for user:  %s' %user.username)
+        return user
+
+if __name__ == '__main__':
+    import sys
+    if sys.argv[1] == 'createadmin':
+        create_admin_account()
+
+    if sys.argv[1] == 'change_password':
+        change_user_password()
+
+    if sys.argv[1] == 'make_admin':
+        make_admin()
+
 '''.format(self.data['project_name'] , self.data['project_name'])
             )
         with open('requirements.txt' , 'w+') as f:
@@ -678,7 +791,7 @@ class User(db.Model):
                 f.write('''
 from flask_admin import Admin
 from .controllers import CustomerView , CustomModelView
-from {}.auth.models import db '''+role+''' , User
+from {}.auth.models import db '''.format(self.data['project_name'])+role+''' , User
 admin = Admin()
 
 def create_module(app , **kwargs):
@@ -689,7 +802,7 @@ def create_module(app , **kwargs):
     for model in models:
         admin.add_view(CustomModelView(model , db.session , category='models'))
 
-                '''.format(self.data['project_name']))
+                ''')
 
         if self.data['admin']['enabled']:
             with open('{}/admin/controllers.py'.format(self.data['project_name']) , 'w+') as f:
@@ -890,14 +1003,20 @@ class CustomModelView(ModelView):
 </html>
             ''')
 
-
 data = create_project(sys.argv[1])
 if data:
-    x = Main(data)
-    x.create_paths()
-    x.create_main()
-    x.create_main_modules()
-    x.create_templates()
+    instance = Main(data)
+    instance.create_paths()
+    instance.create_main()
+    instance.create_main_modules()
+    instance.create_templates()
+
+    from manage import app , db , Role
+    with app.app_context():
+        db.create_all()
+        db.session.add(Role(name='default'))
+        db.session.commit()
+
 # if not data:
 #     print('cos poszlo nie tak')
 
