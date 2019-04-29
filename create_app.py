@@ -76,7 +76,6 @@ def create_project(app_name):
 
     def create_config_file():
         with open('config.json' , 'w') as f:
-            import os
 
             data = {'project_name':app_name , 
                     'app_settings':[
@@ -84,7 +83,7 @@ def create_project(app_name):
                         {
                             'env':'dev', 'object_name':'DevConfig' , 'default':True,
                             'DEBUG':True , 'SECRET_KEY':'if_you_dont_change_this_will_be_change_for_os.urandom(24)' ,
-                            'SQLALCHEMY_DATABASE_URI':'sqlite:///{}/temporary_database.db'.format(os.getcwd()),
+                            'SQLALCHEMY_DATABASE_URI':'sqlite:///{}/temporary_database.db'.format(curent_path),
                             'other_setting':[
                                 {'name':'DEBUG_TB_INTERCEPT_REDIRECTS' , 'value':False}
                             ]
@@ -101,7 +100,7 @@ def create_project(app_name):
                     'virtual_env':{
                         'create_with_venv':True,
                         'install_virtual_env_pack':True,
-                        'venv_name':'env_{}'.format(app_name)
+                        'venv_name':'venv'
                         },
                     'recaptcha':{
                         'integrate_recaptcha':False,
@@ -200,13 +199,13 @@ def create_admin_account():
     print('Username:')
     username = input()
     
-    password = getpass.getpass("Password")
-    password_confirm = getpass.getpass("Password confirm")
+    password = getpass.getpass("Password: ")
+    password_confirm = getpass.getpass("Password confirm: ")
 
     while password != password_confirm:
         print('passwords must be the same')
-        password = getpass.getpass("Password")
-        password_confirm = getpass.getpass("Password confirm")
+        password = getpass.getpass("Password: ")
+        password_confirm = getpass.getpass("Password confirm: ")
 
     with app.app_context():
         user = User.query.filter_by(username = username).first()
@@ -250,13 +249,13 @@ def change_user_password():
             print('user dosn t exist, ensure username is correct and try again')
             return None
 
-        password = getpass.getpass("Password")
-        password_confirm = getpass.getpass("Password confirm")
+        password = getpass.getpass("Password: ")
+        password_confirm = getpass.getpass("Password confirm: ")
         
         while password != password_confirm:
             print('passwords must be the same')
-            password = getpass.getpass("Password")
-            password_confirm = getpass.getpass("Password confirm")
+            password = getpass.getpass("Password: ")
+            password_confirm = getpass.getpass("Password confirm: ")
             
         user.set_password(password)
         db.session.commit()
@@ -1005,6 +1004,33 @@ class CustomModelView(ModelView):
 </html>
             ''')
 
+    def create_virtual_env_(self):
+        if not self.data['virtual_env']['create_with_venv']:
+            return False
+
+        if self.data['virtual_env']['create_with_venv']:
+            if self.data['virtual_env']['install_virtual_env_pack']:
+                os.system('pip install --upgrade virtualenv')
+            os.system('virtualenv -p python3 {}'.format(self.data['virtual_env']['venv_name']))
+
+            import platform 
+            import subprocess
+            
+            if platform.system() == 'Linux':
+                os.system('{}/bin/pip3 install -r requirements.txt'\
+                    .format(self.data['virtual_env']['venv_name']))
+
+            with open('__temp.py' , 'w+') as f:
+                f.write('''
+from manage import app , db , Role
+with app.app_context():
+    db.create_all()
+    if not Role.query.filter_by(name='default').first():
+        db.session.add(Role(name='default'))
+        db.session.commit()
+                ''')
+            os.system('{}/bin/python __temp.py'.format(self.data['virtual_env']['venv_name']))
+            
 data = create_project(sys.argv[1])
 if data:
     instance = Main(data)
@@ -1012,12 +1038,14 @@ if data:
     instance.create_main()
     instance.create_main_modules()
     instance.create_templates()
-
-    from manage import app , db , Role
-    with app.app_context():
-        db.create_all()
-        db.session.add(Role(name='default'))
-        db.session.commit()
+    instance.create_virtual_env_()
+    if not data['virtual_env']['create_with_venv']:
+        from manage import app , db , Role
+        with app.app_context():
+            db.create_all()
+            if not Role.query.filter_by(name='default').first():
+                db.session.add(Role(name='default'))
+                db.session.commit()
 
 # if not data:
 #     print('cos poszlo nie tak')
